@@ -3,8 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
-        android:id="@+id/action_save"
-        android:title="@string/aar_save"
+        android:id="@+id/action_list"
+        android:title="@string/aar_list"
         android:visible="false"
         app:showAsAction="always"/>
 

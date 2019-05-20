@@ -4,7 +4,7 @@ android {
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.zen.noisyai"
-        minSdkVersion 15
+        minSdkVersion 21
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -41,5 +41,8 @@ dependencies {
     //Recorder Libs
     implementation 'com.kailashdabhi:om-recorder:1.1.0'
     implementation 'com.cleveroad:audiovisualization:1.0.1'
+
+    //Badge Icon
+    implementation 'com.github.nikartm:image-support:1.0.5'
 
 }

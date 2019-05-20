@@ -1,9 +1,8 @@
 package com.zen.noisyai;
 
 import android.Manifest;
-import android.content.DialogInterface;
+import android.app.ProgressDialog;
 import android.content.pm.PackageManager;
-import android.content.res.AssetManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.ColorDrawable;
@@ -12,7 +11,6 @@ import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -42,6 +40,7 @@ import omrecorder.AudioChunk;
 import omrecorder.OmRecorder;
 import omrecorder.PullTransport;
 import omrecorder.Recorder;
+import ru.nikartm.support.ImageBadgeView;
 
 public class MainActivity extends AppCompatActivity
         implements PullTransport.OnAudioChunkPulledListener, MediaPlayer.OnCompletionListener {
@@ -70,7 +69,7 @@ public class MainActivity extends AppCompatActivity
     private VisualizerHandler visualizerHandler;
 
     private Timer timer;
-    private MenuItem saveMenuItem;
+    private MenuItem listMenuItem;
     private int recorderSecondsElapsed;
     private int playerSecondsElapsed;
     private boolean isRecording;
@@ -84,7 +83,12 @@ public class MainActivity extends AppCompatActivity
     private ImageButton playView;
 
 
-    static android.content.res.AssetManager AssetManager;
+    private static android.content.res.AssetManager AssetManager;
+    private static ProgressDialog progressDialog;
+    private static int NUMBER_OF_DENOISE;
+    private static ImageBadgeView imageBadgeView;
+    private static boolean IS_DENOISED = false;
+
 
 
     // Used to load the 'rnnoise_demo' library on application startup.
@@ -139,6 +143,16 @@ public class MainActivity extends AppCompatActivity
         }
 
 
+        imageBadgeView = findViewById(R.id.denoise_badge_view);
+        imageBadgeView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                selectAudio();
+            }
+        });
+
+        imageBadgeView.setBadgeValue(NUMBER_OF_DENOISE);
+
         filePath = AUDIO_FILE_PATH;
         source = AudioSource.MIC;
         channel = AudioChannel.STEREO;
@@ -187,12 +201,12 @@ public class MainActivity extends AppCompatActivity
                 .setLayerColors(new int[]{color})
                 .build();
 
-        contentLayout = (RelativeLayout) findViewById(R.id.content);
-        statusView = (TextView) findViewById(R.id.status);
-        timerView = (TextView) findViewById(R.id.timer);
-        restartView = (ImageButton) findViewById(R.id.restart);
-        recordView = (ImageButton) findViewById(R.id.record);
-        playView = (ImageButton) findViewById(R.id.play);
+        contentLayout = findViewById(R.id.content);
+        statusView = findViewById(R.id.status);
+        timerView = findViewById(R.id.timer);
+        restartView = findViewById(R.id.restart);
+        recordView = findViewById(R.id.record);
+        playView = findViewById(R.id.play);
 
         contentLayout.setBackgroundColor(Util.getDarkerColor(color));
         contentLayout.addView(visualizerView, 0);
@@ -202,7 +216,7 @@ public class MainActivity extends AppCompatActivity
         if(Util.isBrightColor(color)) {
             ContextCompat.getDrawable(this, R.drawable.aar_ic_clear)
                     .setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_ATOP);
-            ContextCompat.getDrawable(this, R.drawable.aar_ic_check)
+            ContextCompat.getDrawable(this, R.drawable.playlist)
                     .setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_ATOP);
             statusView.setTextColor(Color.BLACK);
             timerView.setTextColor(Color.BLACK);
@@ -225,14 +239,15 @@ public class MainActivity extends AppCompatActivity
             AssetManager = getAssets();
 
             //final String filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"/input.pcm";
-            final String filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"/";
-            //final String filePath = Environment.getExternalStorageDirectory().getPath() + "/";
+            //final String filePath1 = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"/";
+            final String filePath = Environment.getExternalStorageDirectory().getPath() + "/";
 
             Log.i("FILE_PATH", filePath);
 
-            what = rnnoise_demo(AssetManager, filePath);
+            what = rnnoise_demo(filePath, NUMBER_OF_DENOISE + 1);
+            //what = combine(filePath, filePath);
 
-            publishProgress();
+
             return null;
         }
 
@@ -244,20 +259,16 @@ public class MainActivity extends AppCompatActivity
         @Override
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
-
+            NUMBER_OF_DENOISE++;
+            imageBadgeView.setBadgeValue(NUMBER_OF_DENOISE);
+            progressDialog.dismiss();
             Toast.makeText(MainActivity.this, "RESULT : "+what, Toast.LENGTH_SHORT).show();
         }
 
         @Override
         protected void onProgressUpdate(Void... values) {
             super.onProgressUpdate(values);
-            //Log.i("Progress : ",);
 
-            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-            builder.setTitle("Mobilhanem");
-            builder.setMessage("Uygulama bilgilerini görüntülemek ister misiniz?");
-            
-            builder.show();
         }
     }
 
@@ -266,7 +277,8 @@ public class MainActivity extends AppCompatActivity
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    public static native boolean rnnoise_demo(AssetManager inputF, String inputFName);
+    public static native boolean rnnoise_demo(String inputFName, int denoiseNum);
+    public static native boolean combine(String mOne, String mTwo);
 
 
 
@@ -318,11 +330,12 @@ public class MainActivity extends AppCompatActivity
         super.onSaveInstanceState(outState);
     }
 
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.aar_audio_recorder, menu);
-        saveMenuItem = menu.findItem(R.id.action_save);
-        saveMenuItem.setIcon(ContextCompat.getDrawable(this, R.drawable.aar_ic_check));
+        listMenuItem = menu.findItem(R.id.action_list);
+        listMenuItem.setIcon(ContextCompat.getDrawable(this, R.drawable.playlist));
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -331,8 +344,8 @@ public class MainActivity extends AppCompatActivity
         int i = item.getItemId();
         if (i == android.R.id.home) {
             finish();
-        } else if (i == R.id.action_save) {
-            selectAudio();
+        } else if (i == R.id.action_list) {
+            //selectAudio();
         }
         return super.onOptionsItemSelected(item);
     }
@@ -350,9 +363,18 @@ public class MainActivity extends AppCompatActivity
 
     private void selectAudio() {
         //Toast.makeText(MainActivity.this, "selectAudio", Toast.LENGTH_SHORT).show();
+        IS_DENOISED = true;
+        
         stopRecording();
         setResult(RESULT_OK);
+
+        progressDialog = new ProgressDialog(MainActivity.this);
+        progressDialog.setMessage("Your sound will be denoised.\nPlease wait...");
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+
         new BgTask().execute();
+        //restartRecording(null);
         //finish();
     }
 
@@ -388,6 +410,8 @@ public class MainActivity extends AppCompatActivity
 
     public void restartRecording(View v){
         //Toast.makeText(MainActivity.this, "restartRecording", Toast.LENGTH_SHORT).show();
+        NUMBER_OF_DENOISE = 0;
+        imageBadgeView.setBadgeValue(NUMBER_OF_DENOISE);
         if(isRecording) {
             stopRecording();
         } else if(isPlaying()) {
@@ -400,7 +424,8 @@ public class MainActivity extends AppCompatActivity
                 visualizerHandler.stop();
             }
         }
-        saveMenuItem.setVisible(false);
+        listMenuItem.setVisible(false);
+        imageBadgeView.setVisibility(View.INVISIBLE);
         statusView.setVisibility(View.INVISIBLE);
         restartView.setVisibility(View.INVISIBLE);
         playView.setVisibility(View.INVISIBLE);
@@ -413,7 +438,8 @@ public class MainActivity extends AppCompatActivity
     private void resumeRecording() {
         //Toast.makeText(MainActivity.this, "resumeRecording", Toast.LENGTH_SHORT).show();
         isRecording = true;
-        saveMenuItem.setVisible(false);
+        listMenuItem.setVisible(false);
+        imageBadgeView.setVisibility(View.INVISIBLE);
         statusView.setText(R.string.aar_recording);
         statusView.setVisibility(View.VISIBLE);
         restartView.setVisibility(View.INVISIBLE);
@@ -440,7 +466,8 @@ public class MainActivity extends AppCompatActivity
         //Toast.makeText(MainActivity.this, "pauseRecording", Toast.LENGTH_SHORT).show();
         isRecording = false;
         if(!isFinishing()) {
-            saveMenuItem.setVisible(true);
+            listMenuItem.setVisible(true);
+            imageBadgeView.setVisibility(View.VISIBLE);
         }
         statusView.setText(R.string.aar_paused);
         statusView.setVisibility(View.VISIBLE);
