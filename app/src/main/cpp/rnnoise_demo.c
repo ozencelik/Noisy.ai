@@ -66,6 +66,8 @@ Java_com_zen_noisyai_MainActivity_rnnoise_1demo(JNIEnv *env, jclass type,jobject
     DenoiseState *st;
     st = rnnoise_create();
     f1 = fopen(inputFile, "r");
+    int totalSize = ftell(f1);
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Total Size of File : %d",ftell(f1));
     fout = fopen(outputFile, "w");
 
     while (1) {
@@ -89,6 +91,10 @@ Java_com_zen_noisyai_MainActivity_rnnoise_1demo(JNIEnv *env, jclass type,jobject
 
         if (!first){
             fwrite(tmp, sizeof(short), FRAME_SIZE, fout);
+            fseek(fout, 0, SEEK_END);
+            int currentSize = ftell(fout);
+            int percent = (currentSize/totalSize)*100;
+            __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Total Size of File : %d",percent);
         }
         else{
             putc(0x52, fout);putc(0x49, fout);putc(0x46, fout);putc(0x46, fout);putc(0x2c, fout);putc(0xd9, fout);putc(0x5b, fout);putc(0x00, fout);putc(0x57, fout);putc(0x41, fout);putc(0x56, fout);putc(0x45, fout);
@@ -99,6 +105,7 @@ Java_com_zen_noisyai_MainActivity_rnnoise_1demo(JNIEnv *env, jclass type,jobject
         first = 0;
     }
     __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "End While");
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Total Size of File : %d",ftell(fout));
     rnnoise_destroy(st);
     fclose(f1);
     fclose(fout);
