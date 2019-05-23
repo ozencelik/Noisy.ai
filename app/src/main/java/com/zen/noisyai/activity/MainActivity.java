@@ -1,18 +1,17 @@
-package com.zen.noisyai;
+package com.zen.noisyai.activity;
 
 import android.Manifest;
-import android.content.DialogInterface;
+import android.app.ProgressDialog;
+import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.AssetManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.ColorDrawable;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
-import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -27,12 +26,23 @@ import android.widget.Toast;
 
 import com.cleveroad.audiovisualization.DbmHandler;
 import com.cleveroad.audiovisualization.GLAudioVisualizationView;
+import com.zen.noisyai.Constant;
+import com.zen.noisyai.R;
+import com.zen.noisyai.Util;
+import com.zen.noisyai.VisualizerHandler;
+import com.zen.noisyai.database.DatabaseHelper;
+import com.zen.noisyai.database.model.Record;
 import com.zen.noisyai.model.AudioChannel;
 import com.zen.noisyai.model.AudioSampleRate;
 import com.zen.noisyai.model.AudioSource;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Timer;
@@ -42,22 +52,21 @@ import omrecorder.AudioChunk;
 import omrecorder.OmRecorder;
 import omrecorder.PullTransport;
 import omrecorder.Recorder;
+import pl.bclogic.pulsator4droid.library.PulsatorLayout;
+
+import static com.zen.noisyai.Constant.DATE_FORMAT;
 
 public class MainActivity extends AppCompatActivity
         implements PullTransport.OnAudioChunkPulledListener, MediaPlayer.OnCompletionListener {
-
-
-    private static final String AUDIO_FILE_PATH =
-            Environment.getExternalStorageDirectory().getPath() + "/recorded_audio.wav";
 
     private static final int PERMISSON_CODE = 1240;
     private static final String[] APP_PERMISSIONS = {
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.WAKE_LOCK
     };
 
-    private String filePath;
     private AudioSource source;
     private AudioChannel channel;
     private AudioSampleRate sampleRate;
@@ -70,7 +79,7 @@ public class MainActivity extends AppCompatActivity
     private VisualizerHandler visualizerHandler;
 
     private Timer timer;
-    private MenuItem saveMenuItem;
+    private MenuItem listMenuItem;
     private int recorderSecondsElapsed;
     private int playerSecondsElapsed;
     private boolean isRecording;
@@ -84,7 +93,20 @@ public class MainActivity extends AppCompatActivity
     private ImageButton playView;
 
 
-    static android.content.res.AssetManager AssetManager;
+    private static ProgressDialog progressDialog;
+    private static int NUMBER_OF_DENOISE;
+    //private static ImageBadgeView imageBadgeView;
+    private static PulsatorLayout imageBadgeView;
+
+    private static boolean IS_DENOISED = false;
+    private DateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+    private static String currentDate;
+
+    private DatabaseHelper db;
+    private static double percentage;
+
+    private static boolean IS_INIT_APP = false;
+
 
 
     // Used to load the 'rnnoise_demo' library on application startup.
@@ -120,30 +142,35 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
 
         if(checkAndRequesttPermission()){
-
             initApp();
-
-            //new BgTask().execute();
         }
-
-
     }
 
 
-
-
     public void initApp(){
+
         if (getSupportActionBar() != null) {
             getSupportActionBar().setBackgroundDrawable(
                     new ColorDrawable(ContextCompat.getColor(this, R.color.colorPrimaryDark)));
         }
 
+        db = new DatabaseHelper(this);
 
-        filePath = AUDIO_FILE_PATH;
+        imageBadgeView = findViewById(R.id.denoise_badge_view);
+        imageBadgeView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                selectAudio();
+            }
+        });
+        imageBadgeView.start();
+
+        //imageBadgeView.setBadgeValue(NUMBER_OF_DENOISE);
+
         source = AudioSource.MIC;
         channel = AudioChannel.STEREO;
         sampleRate = AudioSampleRate.HZ_48000;
-        color = ContextCompat.getColor(this, R.color.recorder_bg);
+        color = ContextCompat.getColor(this, R.color.colorPrimary);
         autoStart = false;
         keepDisplayOn = true;
         /*
@@ -187,12 +214,12 @@ public class MainActivity extends AppCompatActivity
                 .setLayerColors(new int[]{color})
                 .build();
 
-        contentLayout = (RelativeLayout) findViewById(R.id.content);
-        statusView = (TextView) findViewById(R.id.status);
-        timerView = (TextView) findViewById(R.id.timer);
-        restartView = (ImageButton) findViewById(R.id.restart);
-        recordView = (ImageButton) findViewById(R.id.record);
-        playView = (ImageButton) findViewById(R.id.play);
+        contentLayout = findViewById(R.id.content);
+        statusView = findViewById(R.id.status);
+        timerView = findViewById(R.id.timer);
+        restartView = findViewById(R.id.restart);
+        recordView = findViewById(R.id.record);
+        playView = findViewById(R.id.play);
 
         contentLayout.setBackgroundColor(Util.getDarkerColor(color));
         contentLayout.addView(visualizerView, 0);
@@ -202,7 +229,7 @@ public class MainActivity extends AppCompatActivity
         if(Util.isBrightColor(color)) {
             ContextCompat.getDrawable(this, R.drawable.aar_ic_clear)
                     .setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_ATOP);
-            ContextCompat.getDrawable(this, R.drawable.aar_ic_check)
+            ContextCompat.getDrawable(this, R.drawable.playlist)
                     .setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_ATOP);
             statusView.setTextColor(Color.BLACK);
             timerView.setTextColor(Color.BLACK);
@@ -211,28 +238,49 @@ public class MainActivity extends AppCompatActivity
             playView.setColorFilter(Color.BLACK);
         }
 
+        IS_INIT_APP = true;
+    }
 
+    public String getFileName(){
+        currentDate = dateFormat.format(new Date());
+        Constant.setInputFileName(currentDate);
 
+        Constant.setOutputFileExtension(1);
+        Constant.setOutputFileName(currentDate);
+
+        return Constant.getInputFileName();
+    }
+
+    /**
+     * Inserting new record in db
+     * and refreshing the list
+     */
+    private long createRecord(Record rec) {
+        // inserting note in db and getting
+        // newly inserted note id
+        long id = db.insertRecord(rec);
+
+        /*
+        // get the newly inserted note from db
+        Record n = db.getRecord(id);
+
+        if (n != null) {
+            Toast.makeText(MainActivity.this, "Succesfully added...", Toast.LENGTH_SHORT).show();
+        }*/
+
+        return id;
     }
 
     //Background Task for Noisy.ai operation
     public class BgTask extends android.os.AsyncTask<Void, Void, Void> {
-        boolean what;
-
         @Override
         protected Void doInBackground(Void... voids) {
 
-            AssetManager = getAssets();
+            Log.i("AHMET", Constant.getInputFileName());
+            Log.i("AHMETT", Constant.getOutputFileName());
+            percentage = rnnoise_demo(Constant.getInputFileName(), Constant.getOutputFileName());
+            //what = combine(filePath, filePath);
 
-            //final String filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"/input.pcm";
-            final String filePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"/";
-            //final String filePath = Environment.getExternalStorageDirectory().getPath() + "/";
-
-            Log.i("FILE_PATH", filePath);
-
-            what = rnnoise_demo(AssetManager, filePath);
-
-            publishProgress();
             return null;
         }
 
@@ -245,19 +293,36 @@ public class MainActivity extends AppCompatActivity
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
 
-            Toast.makeText(MainActivity.this, "RESULT : "+what, Toast.LENGTH_SHORT).show();
+            Record rec = new Record();
+            rec.setName(Constant.INPUT_FILE_NAME);
+            rec.setFilePath(Constant.getInputFileName());
+            rec.setRootFilePath(null);
+            rec.setType(0);
+            rec.setTimestamp(currentDate);
+            long id = createRecord(rec);
+
+            Log.i("ID", ""+id);
+
+            Record rec1 = new Record();
+            rec1.setName(Constant.OUTPUT_FILE_NAME);
+            rec1.setFilePath(Constant.getOutputFileName());
+            rec1.setRootFilePath(rec.getFilePath());
+            rec1.setType(1);
+            rec1.setPercentage(percentage);
+            rec1.setTimestamp(currentDate);
+            createRecord(rec1);
+
+            Log.i("AHMETT", ""+percentage);
+
+            NUMBER_OF_DENOISE++;
+            //if(imageBadgeView != null) imageBadgeView.setBadgeValue(NUMBER_OF_DENOISE);
+            progressDialog.dismiss();
         }
 
         @Override
         protected void onProgressUpdate(Void... values) {
             super.onProgressUpdate(values);
-            //Log.i("Progress : ",);
 
-            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-            builder.setTitle("Mobilhanem");
-            builder.setMessage("Uygulama bilgilerini görüntülemek ister misiniz?");
-            
-            builder.show();
         }
     }
 
@@ -266,9 +331,8 @@ public class MainActivity extends AppCompatActivity
      * A native method that is implemented by the 'native-lib' native library,
      * which is packaged with this application.
      */
-    public static native boolean rnnoise_demo(AssetManager inputF, String inputFName);
-
-
+    public static native double rnnoise_demo(String inputFName, String outputFName);
+    public static native boolean combine(String mOne, String mTwo);
 
 
     @Override
@@ -312,17 +376,15 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
-        /*
-        outState.putString(AndroidAudioRecorder.EXTRA_FILE_PATH, filePath);
-        outState.putInt(AndroidAudioRecorder.EXTRA_COLOR, color);*/
         super.onSaveInstanceState(outState);
     }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.aar_audio_recorder, menu);
-        saveMenuItem = menu.findItem(R.id.action_save);
-        saveMenuItem.setIcon(ContextCompat.getDrawable(this, R.drawable.aar_ic_check));
+        listMenuItem = menu.findItem(R.id.action_list);
+        listMenuItem.setIcon(ContextCompat.getDrawable(this, R.drawable.playlist));
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -331,8 +393,10 @@ public class MainActivity extends AppCompatActivity
         int i = item.getItemId();
         if (i == android.R.id.home) {
             finish();
-        } else if (i == R.id.action_save) {
-            selectAudio();
+        } else if (i == R.id.action_list) {
+            // launch ignore activity
+            startActivity(new Intent(MainActivity.this, ListActivity.class));
+            finish();
         }
         return super.onOptionsItemSelected(item);
     }
@@ -350,9 +414,18 @@ public class MainActivity extends AppCompatActivity
 
     private void selectAudio() {
         //Toast.makeText(MainActivity.this, "selectAudio", Toast.LENGTH_SHORT).show();
+        IS_DENOISED = true;
+        
         stopRecording();
         setResult(RESULT_OK);
+
+        progressDialog = new ProgressDialog(MainActivity.this);
+        progressDialog.setMessage("Your sound will be denoised.\nPlease wait...");
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+
         new BgTask().execute();
+        //restartRecording(null);
         //finish();
     }
 
@@ -387,144 +460,175 @@ public class MainActivity extends AppCompatActivity
     }
 
     public void restartRecording(View v){
-        //Toast.makeText(MainActivity.this, "restartRecording", Toast.LENGTH_SHORT).show();
-        if(isRecording) {
-            stopRecording();
-        } else if(isPlaying()) {
-            stopPlaying();
-        } else {
+        if(IS_INIT_APP){
+            //Toast.makeText(MainActivity.this, "restartRecording", Toast.LENGTH_SHORT).show();
+            NUMBER_OF_DENOISE = 0;
+            //imageBadgeView.setBadgeValue(NUMBER_OF_DENOISE);
+            if(isRecording) {
+                stopRecording();
+            } else if(isPlaying()) {
+                stopPlaying();
+            } else {
+                visualizerHandler = new VisualizerHandler();
+                visualizerView.linkTo(visualizerHandler);
+                visualizerView.release();
+                if(visualizerHandler != null) {
+                    visualizerHandler.stop();
+                }
+            }
+            listMenuItem.setVisible(true);
+            if(imageBadgeView != null) imageBadgeView.setVisibility(View.INVISIBLE);
+            statusView.setVisibility(View.INVISIBLE);
+            restartView.setVisibility(View.INVISIBLE);
+            playView.setVisibility(View.INVISIBLE);
+            recordView.setImageResource(R.drawable.aar_ic_rec);
+            timerView.setText("00:00:00");
+            recorderSecondsElapsed = 0;
+            playerSecondsElapsed = 0;
+        }
+    }
+
+    private void resumeRecording() {
+        if(IS_INIT_APP){
+            //Toast.makeText(MainActivity.this, "resumeRecording", Toast.LENGTH_SHORT).show();
+            isRecording = true;
+            listMenuItem.setVisible(true);
+            if(imageBadgeView != null) imageBadgeView.setVisibility(View.INVISIBLE);
+            statusView.setText(R.string.aar_recording);
+            statusView.setVisibility(View.VISIBLE);
+            restartView.setVisibility(View.INVISIBLE);
+            playView.setVisibility(View.INVISIBLE);
+            recordView.setImageResource(R.drawable.aar_ic_pause);
+            playView.setImageResource(R.drawable.aar_ic_play);
+
             visualizerHandler = new VisualizerHandler();
             visualizerView.linkTo(visualizerHandler);
+
+            if(recorder == null) {
+                timerView.setText("00:00:00");
+
+                recorder = OmRecorder.wav(
+                        new PullTransport.Default(Util.getMic(source, channel, sampleRate), MainActivity.this),
+                        new File(getFileName()));
+            }
+            recorder.resumeRecording();
+
+            startTimer();
+        }
+    }
+
+    private void pauseRecording() {
+        if(IS_INIT_APP){
+            //Toast.makeText(MainActivity.this, "pauseRecording", Toast.LENGTH_SHORT).show();
+            isRecording = false;
+            if(!isFinishing()) {
+                listMenuItem.setVisible(true);
+                if(imageBadgeView != null) imageBadgeView.setVisibility(View.VISIBLE);
+            }
+            statusView.setText(R.string.aar_paused);
+            statusView.setVisibility(View.VISIBLE);
+            restartView.setVisibility(View.VISIBLE);
+            playView.setVisibility(View.VISIBLE);
+            recordView.setImageResource(R.drawable.aar_ic_rec);
+            playView.setImageResource(R.drawable.aar_ic_play);
+
             visualizerView.release();
             if(visualizerHandler != null) {
                 visualizerHandler.stop();
             }
+
+            if (recorder != null) {
+                recorder.pauseRecording();
+            }
+
+            stopTimer();
         }
-        saveMenuItem.setVisible(false);
-        statusView.setVisibility(View.INVISIBLE);
-        restartView.setVisibility(View.INVISIBLE);
-        playView.setVisibility(View.INVISIBLE);
-        recordView.setImageResource(R.drawable.aar_ic_rec);
-        timerView.setText("00:00:00");
-        recorderSecondsElapsed = 0;
-        playerSecondsElapsed = 0;
-    }
-
-    private void resumeRecording() {
-        //Toast.makeText(MainActivity.this, "resumeRecording", Toast.LENGTH_SHORT).show();
-        isRecording = true;
-        saveMenuItem.setVisible(false);
-        statusView.setText(R.string.aar_recording);
-        statusView.setVisibility(View.VISIBLE);
-        restartView.setVisibility(View.INVISIBLE);
-        playView.setVisibility(View.INVISIBLE);
-        recordView.setImageResource(R.drawable.aar_ic_pause);
-        playView.setImageResource(R.drawable.aar_ic_play);
-
-        visualizerHandler = new VisualizerHandler();
-        visualizerView.linkTo(visualizerHandler);
-
-        if(recorder == null) {
-            timerView.setText("00:00:00");
-
-            recorder = OmRecorder.wav(
-                    new PullTransport.Default(Util.getMic(source, channel, sampleRate), MainActivity.this),
-                    new File(filePath));
-        }
-        recorder.resumeRecording();
-
-        startTimer();
-    }
-
-    private void pauseRecording() {
-        //Toast.makeText(MainActivity.this, "pauseRecording", Toast.LENGTH_SHORT).show();
-        isRecording = false;
-        if(!isFinishing()) {
-            saveMenuItem.setVisible(true);
-        }
-        statusView.setText(R.string.aar_paused);
-        statusView.setVisibility(View.VISIBLE);
-        restartView.setVisibility(View.VISIBLE);
-        playView.setVisibility(View.VISIBLE);
-        recordView.setImageResource(R.drawable.aar_ic_rec);
-        playView.setImageResource(R.drawable.aar_ic_play);
-
-        visualizerView.release();
-        if(visualizerHandler != null) {
-            visualizerHandler.stop();
-        }
-
-        if (recorder != null) {
-            recorder.pauseRecording();
-        }
-
-        stopTimer();
     }
 
     private void stopRecording(){
-        //Toast.makeText(MainActivity.this, "stopRecording", Toast.LENGTH_SHORT).show();
-        visualizerView.release();
-        if(visualizerHandler != null) {
-            visualizerHandler.stop();
-        }
+        if(IS_INIT_APP){
+            //Toast.makeText(MainActivity.this, "stopRecording", Toast.LENGTH_SHORT).show();
+            visualizerView.release();
+            if(visualizerHandler != null) {
+                visualizerHandler.stop();
+            }
 
-        recorderSecondsElapsed = 0;
-        if (recorder != null) {
-            recorder.stopRecording();
-            recorder = null;
-        }
+            recorderSecondsElapsed = 0;
+            if (recorder != null) {
+                recorder.stopRecording();
+                recorder = null;
+            }
 
-        stopTimer();
+            stopTimer();
+        }
     }
 
     private void startPlaying(){
-        //Toast.makeText(MainActivity.this, "startPlaying", Toast.LENGTH_SHORT).show();
-        try {
-            stopRecording();
-            player = new MediaPlayer();
-            player.setDataSource(filePath);
-            player.prepare();
-            player.start();
+        if(IS_INIT_APP){
+            //Toast.makeText(MainActivity.this, "startPlaying", Toast.LENGTH_SHORT).show();
+            try {
+                stopRecording();
+                player = new MediaPlayer();
 
-            visualizerView.linkTo(DbmHandler.Factory.newVisualizerHandler(this, player));
-            visualizerView.post(new Runnable() {
-                @Override
-                public void run() {
-                    player.setOnCompletionListener(MainActivity.this);
+                FileInputStream fis = null;
+                try {
+                    fis = new FileInputStream(Constant.getInputFileName());
+                    player.setDataSource(fis.getFD());
+                    player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                    player.prepare();
+                }   finally {
+                    if (fis != null) {
+                        try {
+                            fis.close();
+                        } catch (IOException ignore) {
+                        }
+                    }
+
                 }
-            });
+                player.start();
 
-            timerView.setText("00:00:00");
-            statusView.setText(R.string.aar_playing);
-            statusView.setVisibility(View.VISIBLE);
-            playView.setImageResource(R.drawable.aar_ic_stop);
+                visualizerView.linkTo(DbmHandler.Factory.newVisualizerHandler(this, player));
+                visualizerView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        player.setOnCompletionListener(MainActivity.this);
+                    }
+                });
 
-            playerSecondsElapsed = 0;
-            startTimer();
-        } catch (Exception e){
-            e.printStackTrace();
+                timerView.setText("00:00:00");
+                statusView.setText(R.string.aar_playing);
+                statusView.setVisibility(View.VISIBLE);
+                playView.setImageResource(R.drawable.aar_ic_stop);
+
+                playerSecondsElapsed = 0;
+                startTimer();
+            } catch (Exception e){
+                e.printStackTrace();
+            }
         }
     }
 
     private void stopPlaying(){
-        //Toast.makeText(MainActivity.this, "stopPlaying", Toast.LENGTH_SHORT).show();
-        statusView.setText("");
-        statusView.setVisibility(View.INVISIBLE);
-        playView.setImageResource(R.drawable.aar_ic_play);
+        if(IS_INIT_APP){
+            //Toast.makeText(MainActivity.this, "stopPlaying", Toast.LENGTH_SHORT).show();
+            statusView.setText("");
+            statusView.setVisibility(View.INVISIBLE);
+            playView.setImageResource(R.drawable.aar_ic_play);
 
-        visualizerView.release();
-        if(visualizerHandler != null) {
-            visualizerHandler.stop();
+            visualizerView.release();
+            if(visualizerHandler != null) {
+                visualizerHandler.stop();
+            }
+
+            if(player != null){
+                try {
+                    player.stop();
+                    player.reset();
+                } catch (Exception e){ }
+            }
+
+            stopTimer();
         }
-
-        if(player != null){
-            try {
-                player.stop();
-                player.reset();
-            } catch (Exception e){ }
-        }
-
-        stopTimer();
     }
 
     private boolean isPlaying(){

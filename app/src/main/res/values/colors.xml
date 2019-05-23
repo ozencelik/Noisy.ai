@@ -1,8 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#3F51B5</color>
-    <color name="colorPrimaryDark">#303F9F</color>
-    <color name="colorAccent">#FF4081</color>
+    <!--<color name="colorPrimary">#3F51B5</color>-->
+    <!--<color name="colorPrimaryDark">#303F9F</color>-->
+    <!--<color name="colorAccent">#FF4081</color>-->
 
     <color name="recorder_bg">#F4511E</color>
+    <color name="recorder_bg_light">#ff844c</color>
+    <color name="recorder_bg_dark">#b91400</color>
+
+    <color name="colorPrimary">#455399</color>
+    <color name="colorPrimaryDark">#37427A</color>
+    <color name="colorAccent">#00c6ae</color>
+    <color name="msg_no_notes">#999</color>
+    <color name="hint_enter_note">#89c3c3c3</color>
+    <color name="timestamp">#cccccc</color>
+    <color name="note_list_text">#232323</color>
+
+
+
+
+
+
+
+
+
+    <color name="viewBg">#f1f5f8</color>
+    <color name="album_title">#4c4c4c</color>
+
+    <color name="primaryDark">#303F9F</color>
+    <color name="grayLight">#FAFAFA</color>
+    <color name="startBlue">#09C6DF</color>
+    <color name="endBlue">#0BCCE6</color>
+    <color name="cardSliderBlue">#348af7</color>
+
+    <color name="green_dot_big">@color/cardSliderBlue</color>
+    <color name="green_dot_small">@color/cardSliderBlue</color>
+
+    <color name="appleBlue">#5AC8FA</color>
+    <color name="appleBlueTransparent">#CC5AC8FA</color>
+
+
+    <color name="transparent_white">#CCF3F3F3</color>
+    <color name="transparent_gray_background">#CC222222</color>
+    <color name="transparent_gray">#AA222222</color>
+
+
+    <color name="primary">#E43F3F</color>
+    <color name="primary_darker">#E12929</color>
+
+    <color name="black">#000000</color>
+    <color name="jet">#222222</color>
+    <color name="oil">#333333</color>
+    <color name="monsoon">#777777</color>
+    <color name="jumbo">#D0888888</color>
+    <color name="aluminum">#E0999999</color>
+    <color name="base">#AAAAAA</color>
+    <color name="iron">#CCCCCC</color>
+    <color name="metal">#F3F3F3</color>
+    <color name="white">#FFFFFF</color>
+
+
+    <color name="backgroundcolor">#fcfcfc</color>
+    <color name="lightgray">#ededed</color>
+    <!--<color name="deeppurple">#7c4dff</color>-->
+    <color name="deeppurple">#FFC107</color>  <!--Challenge Fragmentta ki çizgi rengi :) -->
+    <color name="yello">#ffb300</color>
+    <color name="green">#00bfa5</color>
+    <color name="darkblue">#23283a</color>
+    <color name="testcolorblue">#152b38</color>
+    <color name="pink">#fe104d</color>
+
+    <color name="black_overlay">#66000000</color>
+
+    <color name="background_fragment">#2b2b2b</color>
+
+    <color name="materail_green">#FF66ff66</color>
+    <color name="materail_blue">#FF0BCCE6</color>
+    <color name="materail_white">#FFF8F8F8</color>
+    <color name="materail_red">#FFFF3B30</color>
+    <color name="materail_brown">#FFA2845E</color>
+    <color name="materail_black">#FF232323</color>
+
+
+    <color name="materail_light_blue">#4FC3F7</color>
+    <color name="materail_light_yellow">#FFF176</color>
+    <color name="materail_light_orange">#FFAB91</color>
+
+
+    <!--For textview shadow-->
+    <color name="light_font">#FBFBFB</color>
+    <color name="grey_font">#ff9e9e9e</color>
+    <color name="text_shadow">#7F000000</color>
+    <color name="text_shadow_white">#FFFFFF</color>
 </resources>
